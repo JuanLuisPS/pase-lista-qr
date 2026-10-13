@@ -1,118 +1,117 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Prueba de lector QR</title>
-
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
-
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      max-width: 600px;
-      margin: 20px auto;
-      padding: 16px;
-    }
-
-    button {
-      padding: 14px;
-      width: 100%;
-      margin: 10px 0;
-      font-size: 17px;
-    }
-
-    #lector {
-      width: 100%;
-      max-width: 400px;
-      margin: auto;
-    }
-
-    #resultado {
-      padding: 15px;
-      background: #eee;
-      overflow-wrap: anywhere;
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pase de lista QR</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<style>
+body{font-family:Arial,sans-serif;max-width:600px;margin:20px auto;padding:16px}
+button,select,input{box-sizing:border-box;width:100%;padding:13px;margin:7px 0;font-size:16px}
+#lector{max-width:400px;margin:auto}
+#resultado{padding:15px;background:#eee;overflow-wrap:anywhere}
+</style>
 </head>
-
 <body>
-  <h2>Prueba de lector QR</h2>
+<h2>Pase de lista QR</h2>
 
-  <p>Apunta al QR generado en Google Sheets.</p>
+<label>Grupo</label>
+<select id="grupo">
+<option value="3AIM">3AIM</option>
+</select>
 
-  <button id="iniciar">Iniciar escáner</button>
-  <button id="detener">Detener escáner</button>
+<label>Fecha de clase</label>
+<input type="date" id="fecha">
 
-  <div id="lector"></div>
+<button id="iniciar">Iniciar escáner</button>
+<button id="detener">Detener escáner</button>
 
-  <h3>Resultado</h3>
-  <div id="resultado">Esperando un código QR...</div>
+<div id="lector"></div>
+<h3>Resultado</h3>
+<div id="resultado">Selecciona la fecha e inicia el escáner.</div>
 
-  <script>
-    const resultado = document.getElementById("resultado");
-    let lector = null;
-    let iniciando = false;
+<script>
+const URL_APPS_SCRIPT =
+"https://script.google.com/macros/s/AKfycbxA8iZe3uyVRqFglLUuFa12faf5TvWXgR7aXvPvGlffe38vl7Lw2-0SyemJHkYn032y/exec";
 
-    document.getElementById("iniciar").onclick = async function () {
-      if (lector || iniciando) return;
+const resultado = document.getElementById("resultado");
+const fecha = document.getElementById("fecha");
+fecha.value = new Date().toLocaleDateString("en-CA");
 
-      iniciando = true;
-      resultado.textContent = "Iniciando lector...";
+let lector = null;
+let procesando = false;
+let ultimoQR = "";
+let ultimoTiempo = 0;
 
-      try {
-        if (typeof Html5Qrcode === "undefined") {
-          throw new Error("No se cargó la biblioteca de lectura QR.");
+document.getElementById("iniciar").onclick = async () => {
+  if (lector) return;
+
+  if (!fecha.value) {
+    resultado.textContent = "Selecciona la fecha de clase.";
+    return;
+  }
+
+  try {
+    lector = new Html5Qrcode("lector");
+
+    await lector.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 250, height: 250 } },
+      async (id) => {
+        if (procesando) return;
+
+        const ahora = Date.now();
+        if (id === ultimoQR && ahora - ultimoTiempo < 3000) return;
+
+        procesando = true;
+        ultimoQR = id;
+        ultimoTiempo = ahora;
+        resultado.textContent = "QR leído. Registrando asistencia...";
+
+        try {
+          const parametros = new URLSearchParams({
+            accion: "asistencia",
+            id: id,
+            grupo: document.getElementById("grupo").value,
+            fecha: fecha.value
+          });
+
+          const respuesta = await fetch(
+            URL_APPS_SCRIPT + "?" + parametros.toString(),
+            { method: "GET", redirect: "follow" }
+          );
+
+          const datos = await respuesta.json();
+
+          resultado.textContent = datos.nombre
+            ? datos.nombre + "\n" + datos.mensaje
+            : "Respuesta: " + JSON.stringify(datos);
+
+        } catch (error) {
+          resultado.textContent =
+            "No se pudo confirmar el registro. " +
+            "Verifica la implementación de Apps Script. " + error.message;
+        } finally {
+          procesando = false;
         }
-
-        lector = new Html5Qrcode("lector");
-
-        await lector.start(
-          { facingMode: "environment" },
-          {
-            fps: 15,
-            qrbox: function (ancho, alto) {
-              const lado = Math.floor(Math.min(ancho, alto) * 0.8);
-              return { width: lado, height: lado };
-            },
-            aspectRatio: 1
-          },
-          function (texto) {
-            resultado.textContent = "QR leído: " + texto;
-
-            if (navigator.vibrate) navigator.vibrate(150);
-          },
-          function () {}
-        );
-
-        resultado.textContent =
-          "Cámara activa. Centra el QR dentro del recuadro.";
-
-      } catch (error) {
-        resultado.textContent =
-          "Error: " + (error.message || String(error));
-        lector = null;
-
-      } finally {
-        iniciando = false;
       }
-    };
+    );
 
-    document.getElementById("detener").onclick = async function () {
-      if (!lector) return;
+    resultado.textContent = "Cámara activa. Escanea el QR del estudiante.";
 
-      const actual = lector;
-      lector = null;
+  } catch (error) {
+    lector = null;
+    resultado.textContent = "Error de cámara: " + error.message;
+  }
+};
 
-      try {
-        await actual.stop();
-        await actual.clear();
-        resultado.textContent = "Escáner detenido.";
-      } catch (error) {
-        resultado.textContent =
-          "Error al detener: " + (error.message || String(error));
-      }
-    };
-  </script>
+document.getElementById("detener").onclick = async () => {
+  if (!lector) return;
+  await lector.stop();
+  await lector.clear();
+  lector = null;
+  resultado.textContent = "Escáner detenido.";
+};
+</script>
 </body>
 </html>
