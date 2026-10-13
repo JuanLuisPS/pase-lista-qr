@@ -3,148 +3,116 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Prueba de lector QR</title>
 
-  <title>Escáner de asistencia QR</title>
-
- <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
 
   <style>
     body {
       font-family: Arial, sans-serif;
       max-width: 600px;
-      margin: 25px auto;
+      margin: 20px auto;
       padding: 16px;
-      color: #222;
-    }
-
-    h1 {
-      font-size: 25px;
     }
 
     button {
+      padding: 14px;
       width: 100%;
-      padding: 15px;
       margin: 10px 0;
       font-size: 17px;
-      border: none;
-      border-radius: 8px;
-      background: #1769aa;
-      color: white;
     }
 
     #lector {
-      margin-top: 20px;
+      width: 100%;
+      max-width: 400px;
+      margin: auto;
     }
 
     #resultado {
-      background: #f0f3f5;
-      border-radius: 8px;
       padding: 15px;
+      background: #eee;
       overflow-wrap: anywhere;
     }
   </style>
 </head>
 
 <body>
+  <h2>Prueba de lector QR</h2>
 
-  <h1>Escáner de asistencia QR</h1>
+  <p>Apunta al QR generado en Google Sheets.</p>
 
-  <p>
-    Esta página permite comprobar que la cámara de tu
-    celular puede leer los códigos QR de tus alumnos.
-  </p>
-
-  <button id="iniciar">Activar cámara</button>
-
-  <button id="detener">Detener cámara</button>
+  <button id="iniciar">Iniciar escáner</button>
+  <button id="detener">Detener escáner</button>
 
   <div id="lector"></div>
 
-  <h3>Resultado del escaneo</h3>
-
-  <div id="resultado">
-    Esperando un código QR...
-  </div>
+  <h3>Resultado</h3>
+  <div id="resultado">Esperando un código QR...</div>
 
   <script>
-    let scanner = null;
-    let iniciando = false;
-    let procesando = false;
-
     const resultado = document.getElementById("resultado");
+    let lector = null;
+    let iniciando = false;
 
-    document.getElementById("iniciar").onclick = async () => {
-      if (scanner || iniciando) return;
+    document.getElementById("iniciar").onclick = async function () {
+      if (lector || iniciando) return;
 
       iniciando = true;
-      resultado.textContent = "Solicitando acceso a la cámara...";
+      resultado.textContent = "Iniciando lector...";
 
       try {
         if (typeof Html5Qrcode === "undefined") {
-          throw new Error(
-            "No se pudo cargar el lector QR. Comprueba tu conexión."
-          );
+          throw new Error("No se cargó la biblioteca de lectura QR.");
         }
 
-        scanner = new Html5Qrcode("lector");
+        lector = new Html5Qrcode("lector");
 
-        await scanner.start(
+        await lector.start(
           { facingMode: "environment" },
           {
-            fps: 10,
-            qrbox: { width: 230, height: 230 }
+            fps: 15,
+            qrbox: function (ancho, alto) {
+              const lado = Math.floor(Math.min(ancho, alto) * 0.8);
+              return { width: lado, height: lado };
+            },
+            aspectRatio: 1
           },
-          codigo => {
-            if (procesando) return;
+          function (texto) {
+            resultado.textContent = "QR leído: " + texto;
 
-            procesando = true;
-
-            resultado.textContent =
-              "Código leído correctamente: " + codigo;
-
-            if (navigator.vibrate) {
-              navigator.vibrate(150);
-            }
-
-            setTimeout(() => {
-              procesando = false;
-            }, 1500);
+            if (navigator.vibrate) navigator.vibrate(150);
           },
-          () => {}
+          function () {}
         );
 
         resultado.textContent =
-          "Cámara activa. Enfoca un código QR.";
+          "Cámara activa. Centra el QR dentro del recuadro.";
 
       } catch (error) {
-        scanner = null;
-
         resultado.textContent =
-          "No se pudo activar la cámara: " + error.message;
+          "Error: " + (error.message || String(error));
+        lector = null;
 
       } finally {
         iniciando = false;
       }
     };
 
-    document.getElementById("detener").onclick = async () => {
-      if (!scanner) return;
+    document.getElementById("detener").onclick = async function () {
+      if (!lector) return;
 
-      const actual = scanner;
-      scanner = null;
+      const actual = lector;
+      lector = null;
 
       try {
         await actual.stop();
         await actual.clear();
-
-        resultado.textContent = "Cámara detenida.";
-
+        resultado.textContent = "Escáner detenido.";
       } catch (error) {
         resultado.textContent =
-          "Error al detener la cámara: " + error.message;
+          "Error al detener: " + (error.message || String(error));
       }
     };
   </script>
-
 </body>
 </html>
