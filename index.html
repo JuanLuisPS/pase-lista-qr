@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+  <!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -77,10 +77,17 @@ document.getElementById("iniciar").onclick = async () => {
             fecha: fecha.value
           });
 
-          const respuesta = await fetch(
-            URL_APPS_SCRIPT + "?" + parametros.toString(),
-            { method: "GET", redirect: "follow" }
-          );
+          const url = URL_APPS_SCRIPT + "?" + parametros.toString();
+
+          const respuesta = await fetch(url, {
+            method: "GET",
+            redirect: "follow",
+            mode: "cors"
+          });
+
+          if (!respuesta.ok) {
+            throw new Error("Error HTTP: " + respuesta.status);
+          }
 
           const datos = await respuesta.json();
 
